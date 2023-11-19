@@ -7,7 +7,10 @@ const {
   updateContact,
 } = require("./../../models/contacts");
 
-const { schema } = require("./../../validators/contacts");
+const {
+  contactSchema,
+  favoriteSchema,
+} = require("./../../validators/contacts");
 
 const router = express.Router();
 
@@ -24,18 +27,23 @@ router.get("/", async (req, res, next) => {
 
 router.get("/:contactId", async (req, res, next) => {
   const { contactId } = req.params;
-  const contact = await getContactById(contactId);
-  if (contact == undefined) {
-    res.json({
-      status: "not found",
-      code: 404,
-    });
-  } else {
-    res.json({
-      status: "success",
-      code: 200,
-      data: { contact },
-    });
+  try {
+    const contact = await getContactById(contactId);
+    if (contact === null) {
+      res.json({
+        status: "not found",
+        code: 404,
+      });
+    } else {
+      res.json({
+        status: "success",
+        code: 200,
+        data: { contact },
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    next(err);
   }
 });
 
@@ -48,7 +56,7 @@ router.post("/", async (req, res, next) => {
     return;
   }
 
-  const validation = schema.validate(req.body);
+  const validation = contactSchema.validate(req.body);
   if (validation.error) {
     res.status(400).json({
       status: validation.error,
@@ -69,21 +77,71 @@ router.post("/", async (req, res, next) => {
 
 router.delete("/:contactId", async (req, res, next) => {
   const { contactId } = req.params;
-  const contacts = await removeContact(contactId);
-  if (contacts == null) {
-    res.status(404).json({
-      status: "not found",
-      code: 404,
-    });
-  } else {
-    res.status(200).json({
-      status: "contact deleted",
-      code: 200,
-    });
+  try {
+    const contacts = await removeContact(contactId);
+    if (contacts == null) {
+      res.status(404).json({
+        status: "not found",
+        code: 404,
+      });
+    } else {
+      res.status(200).json({
+        status: "contact deleted",
+        code: 200,
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    next(err);
   }
 });
 
 router.put("/:contactId", async (req, res, next) => {
+  try {
+    const { contactId } = req.params;
+    const contact = req.body;
+    if (contact == null) {
+      res.status(400).json({
+        status: "invalid input",
+        code: 400,
+      });
+
+      return;
+    }
+
+    const validation = contactSchema.validate(contact);
+    if (validation.error) {
+      res.status(400).json({
+        status: validation.error,
+        code: 400,
+      });
+
+      return;
+    }
+
+    const updatedContact = await updateContact(contactId, contact);
+
+    if (updatedContact == null) {
+      res.json({
+        status: "not found",
+        code: 404,
+      });
+
+      return;
+    }
+
+    res.json({
+      status: "success",
+      code: 200,
+      data: { updatedContact },
+    });
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
+});
+
+router.patch("/:contactId/favorite", async (req, res, next) => {
   const { contactId } = req.params;
   const contact = req.body;
   if (contact == null) {
@@ -95,7 +153,7 @@ router.put("/:contactId", async (req, res, next) => {
     return;
   }
 
-  const validation = schema.validate(contact);
+  const validation = favoriteSchema.validate(contact);
   if (validation.error) {
     res.status(400).json({
       status: validation.error,
@@ -106,7 +164,8 @@ router.put("/:contactId", async (req, res, next) => {
   }
 
   const updatedContact = await updateContact(contactId, contact);
-  if (updateContact == null) {
+
+  if (updatedContact == null) {
     res.json({
       status: "not found",
       code: 404,
