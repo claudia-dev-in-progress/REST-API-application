@@ -17,7 +17,7 @@ const router = express.Router();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const path = require("path");
-const fs = require("fs").promises;
+const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
 const Jimp = require("jimp");
 
@@ -169,8 +169,8 @@ router.patch(
         return image.resize(250, 250).writeAsync(tempPath + "/" + avatarName);
       })
       .then(() => {
-        fs.rename(tempPath + "/" + avatarName, avatarPath);
-        fs.unlink(req.file.path);
+        fs.renameSync(tempPath + "/" + avatarName, avatarPath);
+        fs.unlinkSync(req.file.path);
       })
       .catch((error) => {
         console.log(error);
