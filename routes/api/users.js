@@ -1,11 +1,14 @@
 const express = require("express");
-const { userSchema } = require("./../../validators/users");
+const { userSchema, verifyUserSchema } = require("./../../validators/users");
 const {
   getUserByEmail,
   getUserById,
   addUser,
   updateUser,
+  getUserByVerificationToken,
 } = require("./../../models/users/users");
+
+const { sendInvitationEmail } = require("./../../email/email_sender");
 
 const { auth } = require("./../../midlewares/auth_midleware");
 
@@ -61,11 +64,15 @@ router.post("/signup", async (req, res, next) => {
         },
         true
       );
+      const verificationToken = uuidv4();
       const user = await addUser({
         email: req.body.email,
         password: hash,
         avatarURL: avatarURL,
+        verificationToken,
       });
+      sendInvitationEmail(req.body.email, verificationToken);
+
       res.status(201).json({
         status: "success",
         code: 201,
@@ -108,6 +115,16 @@ router.post("/login", async (req, res, next) => {
 
     return;
   }
+
+  if (!user.verify) {
+    res.status(401).json({
+      code: 401,
+      message: "Authentication failed",
+    });
+
+    return;
+  }
+
   bcrypt.compare(req.body.password, user.password, async (err, result) => {
     if (err) {
     }
@@ -183,5 +200,77 @@ router.patch(
     res.status(200).json({ avatarURL: req.user.avatarURL });
   }
 );
+
+router.get("/verify/:verificationToken", async (req, res, next) => {
+  const { verificationToken } = req.params;
+  const user = await getUserByVerificationToken(verificationToken);
+  if (user === null) {
+    res.status(404).json({
+      message: "not found",
+      code: 404,
+    });
+
+    return;
+  }
+
+  user.verify = true;
+  user.verificationToken = null;
+  await updateUser(user._id, user);
+
+  res.status(200).json({
+    message: "verification successful",
+    code: 200,
+  });
+});
+
+router.post("/verify", async (req, res, next) => {
+  if (req.body === null) {
+    res.status(400).json({
+      code: 400,
+      message: "missing required field email",
+    });
+
+    return;
+  }
+
+  const validation = verifyUserSchema.validate(req.body);
+  if (validation.error) {
+    res.status(400).json({
+      code: 400,
+      message: "missing required field email",
+    });
+
+    return;
+  }
+
+  const user = await getUserByEmail(req.body.email);
+  if (user === null) {
+    res.status(404).json({
+      code: 404,
+      message: "user not found",
+    });
+
+    return;
+  }
+
+  if (user.verify === true) {
+    res.status(400).json({
+      code: 400,
+      message: "verification has already been passed",
+    });
+
+    return;
+  }
+
+  const verificationToken = uuidv4();
+  user.verificationToken = verificationToken;
+  await updateUser(user._id, user);
+  sendInvitationEmail(user.email);
+
+  res.status(200).json({
+    code: 200,
+    message: "verification email sent",
+  });
+});
 
 module.exports = router;
